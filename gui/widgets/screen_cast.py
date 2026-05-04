@@ -6,92 +6,98 @@
 # Copyright (C) 2018-2021 Romain Vimont
 # See: https://github.com/Genymobile/scrcpy
 
-import tkinter as tk
-from tkinter import ttk, filedialog
-import os
 import subprocess
 import threading
+import time
+import os
 from gui.config import SCRCPY_PATH
 from gui.i18n import tr
 
-_TOPMOST_FLAG = 0x00000008
-_NOTOPMOST_FLAG = 0xFFFFFFF8
-_SWP_NOSIZE = 0x0001
-_SWP_NOMOVE = 0x0002
 
+class ScreenCastManager:
 
-class ScreenCastWindow:
-
-    def __init__(self, parent):
+    def __init__(self):
         self.adb_client = None
         self._scrcpy_process = None
         self.stream_active = False
-
-        self.window = tk.Toplevel(parent)
-        self.window.title(tr("screen_cast_window_title"))
-        self.window.geometry("400x700")
-        self.window.withdraw()
-        self._set_always_on_top(True)
-
-        btn_frame = ttk.Frame(self.window)
-        btn_frame.pack(fill="x", padx=5, pady=5)
-        self.btn_screenshot = ttk.Button(btn_frame, text="", command=self.take_screenshot)
-        self.btn_screenshot.pack(side="left", padx=2)
-        self.btn_toggle_stream = ttk.Button(btn_frame, text="", command=self._toggle_stream)
-        self.btn_toggle_stream.pack(side="left", padx=2)
-        self.btn_close_window = ttk.Button(btn_frame, text="", command=self.hide)
-        self.btn_close_window.pack(side="right", padx=2)
+        self._monitor_thread = None
+        self._monitor_running = False
+        self._on_state_change_callback = None
 
     def set_adb_client(self, adb_client):
         self.adb_client = adb_client
 
-    def show(self):
-        self.window.deiconify()
-        self._set_always_on_top(True)
-        self.window.lift()
-        self.window.focus_set()
+    def set_on_state_change_callback(self, callback):
+        self._on_state_change_callback = callback
 
-    def hide(self):
-        if self.stream_active:
-            self._stop_scrcpy()
-            self.stream_active = False
-            self.btn_toggle_stream.config(text=tr("screen_cast_toggle_start"))
-        self.window.withdraw()
+    def _get_phone_resolution(self):
+        try:
+            out, ok = self.adb_client.run_adb("shell", "wm", "size")
+            if ok and out:
+                size_str = out.split(":")[-1].strip()
+                w, h = size_str.split("x")
+                return int(w), int(h)
+        except Exception:
+            pass
+        return 0, 0
 
-    def _set_always_on_top(self, on):
-        self.window.attributes("-topmost", on)
+    def _process_monitor(self):
+        while self._monitor_running:
+            if self._scrcpy_process:
+                if self._scrcpy_process.poll() is not None:
+                    self._on_scrcpy_exited()
+                    break
+            time.sleep(0.1)
 
-    def _container_size(self):
-        self.window.update()
-        w, h = self.window.winfo_width(), self.window.winfo_height()
-        if w < 100 or h < 100:
-            w, h = 400, 700
-        return max(w, 300), max(h, 500)
+    def _on_scrcpy_exited(self):
+        if self.stream_active and self.adb_client:
+            self.adb_client.log(tr("screen_cast_stopping"))
+        self._scrcpy_process = None
+        self.stream_active = False
+        if self._on_state_change_callback:
+            self._on_state_change_callback(False)
 
     def start_stream(self):
         if not self.adb_client or not self.adb_client.current_device:
             self.adb_client.log(tr("screen_cast_not_connected"), True)
             return
+        
         if self._scrcpy_process and self._scrcpy_process.poll() is None:
             self.adb_client.log(tr("screen_cast_already_running"))
             return
-
-        self.stream_active = True
+        
         self.adb_client.log(tr("screen_cast_starting"))
         self._stop_scrcpy()
-
-        w, h = self._container_size()
-        self.adb_client.log(tr("screen_cast_cast_size", width=w, height=h))
+        
+        # Get screen size to calculate window dimensions
+        try:
+            import tkinter as tk
+            temp_root = tk.Tk()
+            temp_root.withdraw()
+            screen_w = temp_root.winfo_screenwidth()
+            screen_h = temp_root.winfo_screenheight() - 80
+            temp_root.destroy()
+        except Exception:
+            screen_w, screen_h = 1920, 1000
+        
+        phone_w, phone_h = self._get_phone_resolution()
+        if phone_w and phone_h:
+            aspect = phone_w / phone_h
+            calc_w = int(screen_h * aspect)
+            if calc_w > screen_w:
+                calc_w = screen_w
+                screen_h = int(calc_w / aspect)
+            window_w, window_h = calc_w, screen_h
+        else:
+            window_w, window_h = 600, 1000
 
         cmd = [
             str(SCRCPY_PATH),
             "-s", self.adb_client.current_device,
-            "--max-size", str(max(w, h)),
-            "--window-width", str(w),
-            "--window-height", str(h),
-            "--video-bit-rate", "16M",
-            "--max-fps", "60",
-            "--window-title", "scrcpy",
+            "--window-width", str(window_w),
+            "--window-height", str(window_h),
+            "--video-bit-rate", "8M",
+            "--max-fps", "25",
             "--always-on-top",
         ]
 
@@ -101,7 +107,14 @@ class ScreenCastWindow:
             self._scrcpy_process = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                 creationflags=subprocess.CREATE_NO_WINDOW)
+            self.stream_active = True
+            if self._on_state_change_callback:
+                self._on_state_change_callback(True)
             self.adb_client.log(tr("screen_cast_scrcpy_started", pid=self._scrcpy_process.pid))
+
+            self._monitor_running = True
+            self._monitor_thread = threading.Thread(target=self._process_monitor, daemon=True)
+            self._monitor_thread.start()
 
             def read_stderr():
                 try:
@@ -117,8 +130,11 @@ class ScreenCastWindow:
         except Exception as e:
             self.adb_client.log(tr("screen_cast_scrcpy_failed", error=e), True)
             self.stream_active = False
+            if self._on_state_change_callback:
+                self._on_state_change_callback(False)
 
     def _stop_scrcpy(self):
+        self._monitor_running = False
         if self._scrcpy_process:
             try:
                 self._scrcpy_process.terminate()
@@ -130,19 +146,21 @@ class ScreenCastWindow:
                     pass
             self._scrcpy_process = None
 
-    def _toggle_stream(self):
+    def toggle_stream(self):
         if self.stream_active:
-            self.stream_active = False
+            if self.adb_client:
+                self.adb_client.log(tr("screen_cast_stopping"))
             self._stop_scrcpy()
-            self.btn_toggle_stream.config(text=tr("screen_cast_toggle_start"))
-            self.adb_client.log(tr("screen_cast_stopping"))
+            self.stream_active = False
+            if self._on_state_change_callback:
+                self._on_state_change_callback(False)
         else:
-            self.btn_toggle_stream.config(text=tr("screen_cast_toggle_stop"))
             self.start_stream()
 
     def take_screenshot(self):
         if not self.adb_client or not self.adb_client.current_device:
             return
+        from tkinter import filedialog
         if save_path := filedialog.asksaveasfilename(
                 title=tr("screen_cast_save_screenshot_title"), defaultextension=".png", filetypes=[(tr("screen_cast_png_images"), "*.png")]):
             phone_file = "/sdcard/screenshot_save.png"
@@ -150,12 +168,3 @@ class ScreenCastWindow:
             self.adb_client.run_adb("pull", phone_file, save_path)
             self.adb_client.run_adb("shell", "rm", phone_file)
             self.adb_client.log(tr("screen_cast_save_success", path=save_path))
-
-    def refresh_ui(self):
-        self.window.title(tr("screen_cast_window_title"))
-        self.btn_screenshot.config(text=tr("screen_cast_screenshot"))
-        self.btn_close_window.config(text=tr("screen_cast_close_window"))
-        if self.stream_active:
-            self.btn_toggle_stream.config(text=tr("screen_cast_toggle_stop"))
-        else:
-            self.btn_toggle_stream.config(text=tr("screen_cast_toggle_start"))

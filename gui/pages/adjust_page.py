@@ -52,10 +52,31 @@ class AdjustPage(BasePage):
         label.pack(side="left", padx=5)
         self.scales[key] = {"var": var, "label": label, "fmt": fmt, "title_key": title_key}
         self.scale_frames[key] = frame
+        
+        if key == "brightness":
+            btn_frame = ttk.Frame(frame)
+            btn_frame.pack(fill="x", padx=5, pady=5)
+            self.btn_brightness_auto_on = ttk.Button(btn_frame, text="", command=self._on_brightness_auto_on)
+            self.btn_brightness_auto_on.pack(side="left", padx=2)
+            self.btn_brightness_auto_off = ttk.Button(btn_frame, text="", command=self._on_brightness_auto_off)
+            self.btn_brightness_auto_off.pack(side="left", padx=2)
+    
+    def _on_brightness_auto_on(self):
+        if self.adb_client and self.adb_client.current_device:
+            self.adb_client.run_adb_cmd("shell settings put system screen_brightness_mode 1")
+    
+    def _on_brightness_auto_off(self):
+        if self.adb_client and self.adb_client.current_device:
+            self.adb_client.run_adb_cmd("shell settings put system screen_brightness_mode 0")
     
     def refresh_ui(self):
         for key, info in self.scales.items():
             self.scale_frames[key].config(text=tr(info["title_key"]))
+        if "brightness" in self.scales:
+            if hasattr(self, "btn_brightness_auto_on"):
+                self.btn_brightness_auto_on.config(text=tr("adjust_brightness_auto_on"))
+            if hasattr(self, "btn_brightness_auto_off"):
+                self.btn_brightness_auto_off.config(text=tr("adjust_brightness_auto_off"))
 
     def load_adjust_info(self):
         if not self.adb_client or not self.adb_client.current_device:
