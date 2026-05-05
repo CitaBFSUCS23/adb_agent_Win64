@@ -64,7 +64,7 @@ _CHAT_TAGS = {
     "agent_complete": {"foreground": "#188038"},
     "error": {"foreground": "#d93025"},
     "system": {"foreground": "#5f6368"},
-    "pending": {"foreground": "#e37400", "font": ("Microsoft YaHei", 10, "bold")},
+    "pending": {"foreground": "#e37400"},
 }
 
 _MEDIA_EXTS = (".jpg", ".png", ".mp4", ".mp3")
@@ -121,7 +121,7 @@ class AgentPage(BasePage):
         self.chat_frame.grid_rowconfigure(0, weight=1)
         self.chat_frame.grid_columnconfigure(0, weight=1)
 
-        self.chat_text = scrolledtext.ScrolledText(self.chat_frame, state="disabled", font=("Microsoft YaHei", 10), wrap="word")
+        self.chat_text = scrolledtext.ScrolledText(self.chat_frame, state="disabled", wrap="word")
         self.chat_text.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         for tag, cfg in _CHAT_TAGS.items():
             self.chat_text.tag_config(tag, **cfg)
@@ -141,7 +141,7 @@ class AgentPage(BasePage):
         self.btn_send = ttk.Button(left_btn_frame, text="", command=self._send_message)
         self.btn_send.pack(fill="x", pady=2)
 
-        self.agent_input = tk.Text(input_frame, font=("Microsoft YaHei", 10), height=4, wrap="word")
+        self.agent_input = tk.Text(input_frame, height=4, wrap="word")
         self.agent_input.pack(side="right", fill="both", expand=True)
         self.agent_input.bind("<Control-Return>", lambda e: self._send_message())
         self._set_buttons_enabled(False)
@@ -347,8 +347,7 @@ class AgentPage(BasePage):
         threading.Thread(target=self._run_agent, args=(user_input, config), daemon=True).start()
 
     def _stop_agent(self):
-        self._agent_running = False
-        self._action_event.set()
+        self._set_action("stop")
         self._chat_log(tr("agent_stopping"), "system")
 
     def _run_agent(self, user_goal, config):
@@ -357,7 +356,9 @@ class AgentPage(BasePage):
             {"role": "user", "content": f"Device connected: {self.adb_client.current_device}\n\nUser task: {user_goal}\n\nStart executing. Output your first THOUGHT and COMMAND."},
         ]
 
-        for step in range(1, 21):
+        step = 0
+        while True:
+            step += 1
             if not self._agent_running:
                 self._chat_log(tr("agent_stopped"), "system")
                 return
@@ -439,8 +440,6 @@ class AgentPage(BasePage):
                         {"role": "assistant", "content": raw_response},
                         {"role": "user", "content": self._smart_observation(ok, output or "", user_goal, cmd)},
                     ]
-                    if len(self._messages) > 50:
-                        self._messages = [self._messages[0]] + self._messages[-20:]
 
-        self._chat_log(tr("agent_max_steps_reached"), "error")
-        self._agent_running = False
+            if step % 20 == 0:
+                self._messages = [self._messages[0], self._messages[1]] + self._messages[-6:]

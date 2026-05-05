@@ -44,6 +44,10 @@ A powerful Python-based GUI tool for managing Android devices via ADB (Android D
 - Create and save custom ADB script sequences
 - Support for sleep/delay between commands
 - Execute, stop, load, and delete scripts
+- Button palette with categorized ADB commands (navigation, volume, power, touch, flow control)
+- Interactive hint system: click a button to see parameter explanations
+- Variable templates: commands use placeholders like <x>, <y>, <duration_ms> for easy customization
+- File-based storage: scripts are saved as JSON in `scripts/` directory, no internal database
 
 ### AI Agent Assistant
 - Natural language interface to control Android devices
@@ -73,7 +77,6 @@ A powerful Python-based GUI tool for managing Android devices via ADB (Android D
 ## Usage
 
 ```bash
-cd Agent
 python gui/main.py
 ```
 
