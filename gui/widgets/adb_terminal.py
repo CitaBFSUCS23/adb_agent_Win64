@@ -10,14 +10,14 @@ class ADBTerminal:
         self.frame = ttk.LabelFrame(parent, text="")
         self.frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.log_text = scrolledtext.ScrolledText(self.frame, state="disabled", font=("Consolas", 10), wrap="word")
+        self.log_text = scrolledtext.ScrolledText(self.frame, state="disabled", wrap="word")
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
         self.log_text.tag_config("error", foreground="red")
         self.log_text.tag_config("normal", foreground="black")
 
         input_frame = ttk.Frame(self.frame)
         input_frame.pack(fill="x", padx=5, pady=5)
-        self.quick_cmd_entry = ttk.Entry(input_frame, font=("Consolas", 10))
+        self.quick_cmd_entry = ttk.Entry(input_frame)
         self.quick_cmd_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         self.quick_cmd_entry.bind("<Return>", lambda e: self._exec_quick_cmd())
         self.btn_exec = ttk.Button(input_frame, text="", command=self._exec_quick_cmd)

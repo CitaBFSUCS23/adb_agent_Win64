@@ -1,4 +1,3 @@
-import tkinter as tk
 from tkinter import ttk
 from gui.utils import BasePage
 from gui.i18n import tr

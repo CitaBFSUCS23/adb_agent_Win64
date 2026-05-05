@@ -8,6 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from gui.utils import ADBClient
 from gui.widgets.adb_terminal import ADBTerminal
 from gui.widgets.screen_cast import ScreenCastManager
+from gui.widgets.key_simulation import KeySimulationWidget
+from gui.widgets.language_and_nav import LanguageAndNavWidget
 from gui.pages.home_page import HomePage
 from gui.pages.software_page import SoftwarePage
 from gui.pages.display_page import DisplayPage
@@ -16,7 +18,7 @@ from gui.pages.adjust_page import AdjustPage
 from gui.pages.script_page import ScriptPage
 from gui.pages.agent_page import AgentPage
 from gui.config import NAV_PAGES, DEFAULT_LANG
-from gui.i18n import tr, set_lang, get_lang, available_langs
+from gui.i18n import tr, set_lang
 
 _PAGE_CLASSES = [HomePage, SoftwarePage, DisplayPage, BatteryPage, AdjustPage, ScriptPage, AgentPage]
 
@@ -40,23 +42,10 @@ class MainApp:
         left_frame = ttk.Frame(top_horizontal_paned)
         top_horizontal_paned.add(left_frame, weight=1)
 
-        top_frame = ttk.Frame(left_frame)
-        top_frame.pack(fill="x", padx=5, pady=5)
-        self.lbl_lang = ttk.Label(top_frame, text="")
-        self.lbl_lang.pack(side="left", padx=2)
-        self.lang_combo = ttk.Combobox(top_frame, values=available_langs(), state="readonly", width=10)
-        self.lang_combo.set(get_lang())
-        self.lang_combo.pack(side="left", padx=2)
-        self.lang_combo.bind("<<ComboboxSelected>>", self._on_lang_changed)
-
-        nav_frame = ttk.Frame(left_frame)
-        nav_frame.pack(fill="x", padx=5, pady=5)
-        self.nav_buttons = []
-        for i, (_, page_key) in enumerate(NAV_PAGES):
-            btn = ttk.Button(nav_frame, text="", width=8,
-                           command=lambda idx=i: self.show_page(idx))
-            btn.pack(side="left", padx=1)
-            self.nav_buttons.append(btn)
+        self.language_and_nav = LanguageAndNavWidget(left_frame, 
+            on_lang_changed=self._on_lang_changed,
+            on_nav_clicked=self.show_page)
+        self.language_and_nav.frame.pack(fill="x")
 
         style = ttk.Style()
         style.layout('Hidden.TNotebook.Tab', [])
@@ -74,9 +63,12 @@ class MainApp:
         self.adb_terminal = ADBTerminal(center_frame)
         self.adb_terminal.set_adb_client(self.adb_client)
 
-        self.key_frame = ttk.LabelFrame(main_vertical_paned, text="")
-        main_vertical_paned.add(self.key_frame, weight=0)
-        self._build_key_bar(self.key_frame)
+        self.key_simulation = KeySimulationWidget(main_vertical_paned, self.adb_client)
+        main_vertical_paned.add(self.key_simulation.frame, weight=0)
+        
+        # Connect screen cast and screenshot buttons
+        self.key_simulation.btn_stream_toggle.config(command=self._toggle_stream)
+        self.key_simulation.btn_screenshot.config(command=self._take_screenshot)
 
         self.screen_cast_manager = ScreenCastManager()
         self.screen_cast_manager.set_adb_client(self.adb_client)
@@ -86,57 +78,6 @@ class MainApp:
 
         self._refresh_language()
         self._initial_refresh()
-
-    def _build_key_bar(self, parent):
-        self.key_buttons = []
-        self.long_press_buttons = []
-        key_row = ttk.Frame(parent)
-        key_row.pack(fill="x", padx=5, pady=3)
-        
-        # Navigation group: Back, Home, Recents
-        for text_key, code in [
-            ("home_key_back", 4),
-            ("home_key_home", 3),
-            ("home_key_recents", 187),
-        ]:
-            btn = ttk.Button(key_row, text="", command=lambda c=code: self.adb_client.run_adb_cmd(f"shell input keyevent {c}"))
-            btn.pack(side="left", padx=3)
-            self.key_buttons.append((btn, text_key))
-        
-        # Separator 1
-        ttk.Separator(key_row, orient="vertical").pack(side="left", padx=8, fill="y")
-        
-        # Volume group: Vol+, Vol-, Mute
-        for text_key, code in [
-            ("home_key_vol_up", 24),
-            ("home_key_vol_down", 25),
-            ("home_key_mute", 164),
-        ]:
-            btn = ttk.Button(key_row, text="", command=lambda c=code: self.adb_client.run_adb_cmd(f"shell input keyevent {c}"))
-            btn.pack(side="left", padx=3)
-            self.key_buttons.append((btn, text_key))
-        
-        # Separator 2
-        ttk.Separator(key_row, orient="vertical").pack(side="left", padx=8, fill="y")
-        
-        # Power group: Power, Long Press Power
-        for text_key, code in [
-            ("home_key_power", 26),
-        ]:
-            btn = ttk.Button(key_row, text="", command=lambda c=code: self.adb_client.run_adb_cmd(f"shell input keyevent {c}"))
-            btn.pack(side="left", padx=3)
-            self.key_buttons.append((btn, text_key))
-            lp_btn = ttk.Button(key_row, text="", command=lambda c=code: self.adb_client.run_adb_cmd(f"shell input keyevent --longpress {c}"))
-            lp_btn.pack(side="left", padx=3)
-            self.long_press_buttons.append((lp_btn, "home_key_power_long"))
-        
-        # Separator 3
-        ttk.Separator(key_row, orient="vertical").pack(side="left", padx=8, fill="y")
-
-        self.btn_stream_toggle = ttk.Button(key_row, text="", command=self._toggle_stream)
-        self.btn_stream_toggle.pack(side="left", padx=3)
-        self.btn_screenshot = ttk.Button(key_row, text="", command=self._take_screenshot)
-        self.btn_screenshot.pack(side="left", padx=3)
 
     def _toggle_stream(self):
         if self.screen_cast_manager:
@@ -154,25 +95,16 @@ class MainApp:
 
     def _refresh_language(self):
         self.root.title(tr("main_title"))
-        self.lbl_lang.config(text=tr("main_language_label"))
-        for i, btn in enumerate(self.nav_buttons):
-            btn.config(text=tr(NAV_PAGES[i][1]))
+        self.language_and_nav.refresh_ui()
         self.adb_terminal.refresh_ui()
+        if hasattr(self, "key_simulation"):
+            self.key_simulation.refresh_ui()
         for pc in self.page_classes.values():
             if hasattr(pc, "refresh_ui"):
                 pc.refresh_ui()
-        for btn, text_key in self.key_buttons:
-            btn.config(text=tr(text_key))
-        for btn, text_key in self.long_press_buttons:
-            btn.config(text=tr(text_key))
-        self.key_frame.config(text=tr("home_key_frame"))
-        self.btn_stream_toggle.config(text=tr("home_stream_btn"))
-        self.btn_screenshot.config(text=tr("home_screenshot_btn"))
 
-    def _on_lang_changed(self, event=None):
-        if new_lang := self.lang_combo.get():
-            set_lang(new_lang)
-            self._refresh_language()
+    def _on_lang_changed(self):
+        self._refresh_language()
 
     def _initial_refresh(self):
         devices = self.adb_client.refresh_devices()

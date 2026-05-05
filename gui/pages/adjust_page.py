@@ -4,10 +4,10 @@ from gui.utils import BasePage
 from gui.i18n import tr
 
 _SCALE_DEFS = [
-    ("adjust_font_size", "font", 0.5, 2.0, 1.0, "{:.1f}"),
-    ("adjust_anim_speed", "anim", 0.0, 10.0, 1.0, "{:.1f}"),
-    ("adjust_screen_off", "screen_off", 5000, 300000, 30000, "{}ms"),
-    ("adjust_brightness", "brightness", 0, 255, 100, "{}"),
+    ("adjust_font_size", "font", 0.5, 2.0, "{:.1f}"),
+    ("adjust_anim_speed", "anim", 0.0, 10.0, "{:.1f}"),
+    ("adjust_screen_off", "screen_off", 5000, 300000, "{}ms"),
+    ("adjust_brightness", "brightness", 0, 255, "{}"),
 ]
 
 _LOAD_CMDS = {
@@ -32,23 +32,23 @@ class AdjustPage(BasePage):
         super().__init__(parent)
         self.scales = {}
         self.scale_frames = {}
-        for title_key, key, from_, to, default, fmt in _SCALE_DEFS:
-            self._create_scale(title_key, key, from_, to, default, fmt)
+        for title_key, key, from_, to, fmt in _SCALE_DEFS:
+            self._create_scale(title_key, key, from_, to, fmt)
         self.refresh_ui()
 
-    def _create_scale(self, title_key, key, from_, to, default, fmt):
+    def _create_scale(self, title_key, key, from_, to, fmt):
         frame = ttk.LabelFrame(self.frame, text="")
         frame.pack(fill="x", padx=5, pady=5)
         inner = ttk.Frame(frame)
         inner.pack(fill="x", padx=5, pady=5)
 
-        var = tk.DoubleVar(value=default) if isinstance(default, float) else tk.IntVar(value=default)
+        var = tk.DoubleVar() if to > 1.0 else tk.IntVar()
         scale = ttk.Scale(inner, from_=from_, to=to, orient="horizontal", variable=var)
         scale.pack(side="left", fill="x", expand=True)
         scale.bind("<ButtonRelease-1>", lambda e: self._on_set(key))
         scale.bind("<B1-Motion>", lambda e: self._update_label(key))
 
-        label = ttk.Label(inner, text=fmt.format(default), width=10)
+        label = ttk.Label(inner, text="", width=10)
         label.pack(side="left", padx=5)
         self.scales[key] = {"var": var, "label": label, "fmt": fmt, "title_key": title_key}
         self.scale_frames[key] = frame
