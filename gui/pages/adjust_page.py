@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from gui.utils import BasePage
 from gui.i18n import tr
 
@@ -81,14 +83,31 @@ class AdjustPage(BasePage):
     def load_adjust_info(self):
         if not self.adb_client or not self.adb_client.current_device:
             return
-        for key, (cmd, cast) in _LOAD_CMDS.items():
-            out, _ = self.adb_client.run_adb_cmd(cmd)
-            try:
-                val = cast(out)
-            except (ValueError, TypeError):
-                continue
-            self.scales[key]["var"].set(val)
-            self.scales[key]["label"].config(text=self.scales[key]["fmt"].format(val))
+        threading.Thread(target=self._load_adjust_info_async, daemon=True).start()
+
+    def _load_adjust_info_async(self):
+        data = {}
+        with ThreadPoolExecutor(max_workers=len(_LOAD_CMDS)) as executor:
+            futures = {
+                executor.submit(self.adb_client.run_adb_cmd, cmd): (key, cast)
+                for key, (cmd, cast) in _LOAD_CMDS.items()
+            }
+            for future in as_completed(futures):
+                key, cast = futures[future]
+                try:
+                    out, _ = future.result()
+                    val = cast(out)
+                    data[key] = val
+                except (ValueError, TypeError):
+                    pass
+        
+        self.frame.after(0, lambda: self._update_adjust_ui(data))
+
+    def _update_adjust_ui(self, data):
+        for key, val in data.items():
+            if key in self.scales:
+                self.scales[key]["var"].set(val)
+                self.scales[key]["label"].config(text=self.scales[key]["fmt"].format(val))
 
     def _update_label(self, key):
         s = self.scales[key]

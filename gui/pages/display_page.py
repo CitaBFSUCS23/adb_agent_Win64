@@ -1,4 +1,6 @@
 from tkinter import ttk
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from gui.utils import BasePage
 from gui.i18n import tr
 
@@ -82,23 +84,40 @@ class DisplayPage(BasePage):
     def load_display_info(self):
         if not self.adb_client or not self.adb_client.current_device:
             return
-        output, ok = self.adb_client.run_adb_cmd("shell wm size")
+        threading.Thread(target=self._load_display_info_async, daemon=True).start()
+
+    def _load_display_info_async(self):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            wm_size_future = executor.submit(self.adb_client.run_adb_cmd, "shell wm size")
+            wm_density_future = executor.submit(self.adb_client.run_adb_cmd, "shell wm density")
+            
+            output, ok = wm_size_future.result()
+            dpi_output, dpi_ok = wm_density_future.result()
+        
+        data = {}
         if ok and output:
-            self.display_info_label.config(text=output)
-            if size_str := self._find_override(output, "Override size:", "Physical size:"):
+            data["size"] = output
+            data["size_str"] = self._find_override(output, "Override size:", "Physical size:")
+        if dpi_ok and dpi_output:
+            dpi_str = self._find_override(dpi_output, "Override density:", "Physical density:")
+            if dpi_str.isdigit():
+                data["dpi"] = dpi_str
+        
+        self.frame.after(0, lambda: self._update_display_info_ui(data))
+
+    def _update_display_info_ui(self, data):
+        if "size" in data:
+            self.display_info_label.config(text=data["size"])
+            if size_str := data.get("size_str"):
                 if "x" in size_str:
                     w, h = size_str.split("x")
                     self.res_width_entry.delete(0, "end")
                     self.res_width_entry.insert(0, w.strip())
                     self.res_height_entry.delete(0, "end")
                     self.res_height_entry.insert(0, h.strip())
-                    
-        dpi_output, dpi_ok = self.adb_client.run_adb_cmd("shell wm density")
-        if dpi_ok and dpi_output:
-            if dpi_str := self._find_override(dpi_output, "Override density:", "Physical density:"):
-                if dpi_str.isdigit():
-                    self.dpi_entry.delete(0, "end")
-                    self.dpi_entry.insert(0, dpi_str)
+        if "dpi" in data:
+            self.dpi_entry.delete(0, "end")
+            self.dpi_entry.insert(0, data["dpi"])
                         
     def _set_resolution(self):
         if (w := self.res_width_entry.get().strip()) and (h := self.res_height_entry.get().strip()):

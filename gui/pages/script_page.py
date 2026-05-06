@@ -49,8 +49,13 @@ class ScriptPage(BasePage):
         self.captured_coords = []
         self.coord_marker = None
         self.script_running = False
+        self.screen_cast_manager = None
+        self.coord_picker_window = None
         self._build_ui()
         self.refresh_ui()
+
+    def set_screen_cast_manager(self, manager):
+        self.screen_cast_manager = manager
 
     def _build_ui(self):
         main_split = ttk.PanedWindow(self.frame, orient=tk.HORIZONTAL)
@@ -87,8 +92,6 @@ class ScriptPage(BasePage):
         self.btn_run.pack(side="left", padx=3)
         self.btn_stop = ttk.Button(self.btn_frame, text="", command=self._stop_script, takefocus=False)
         self.btn_stop.pack(side="left", padx=3)
-        self.btn_clear = ttk.Button(self.btn_frame, text="", command=self._clear_script, takefocus=False)
-        self.btn_clear.pack(side="left", padx=3)
         self.btn_get_coords = ttk.Button(self.btn_frame, text="", command=self._open_coord_picker, takefocus=False)
         self.btn_get_coords.pack(side="left", padx=3)
         
@@ -190,7 +193,6 @@ class ScriptPage(BasePage):
         self.btn_save.config(text=tr("script_save"))
         self.btn_run.config(text=tr("script_run"))
         self.btn_stop.config(text=tr("script_stop"))
-        self.btn_clear.config(text=tr("script_clear"))
         self.btn_get_coords.config(text=tr("script_btn_get_coords"))
         self.btn_load_list.config(text=tr("script_load_list"))
         self.btn_delete_selected.config(text=tr("script_delete"))
@@ -310,23 +312,64 @@ class ScriptPage(BasePage):
         if not self.adb_client or not self.adb_client.current_device:
             self._log(tr("common_select_device"), True)
             return
+
+        if self.coord_picker_window is not None and self.coord_picker_window.winfo_exists():
+            self.coord_picker_window.lift()
+            self.coord_picker_window.focus_set()
+            return
         
         self._log(tr("script_taking_screenshot"))
-        
+        threading.Thread(target=self._capture_and_show_picker, daemon=True).start()
+
+    def _capture_and_show_picker(self):
         try:
             local_file = self._capture_screenshot()
-            self._show_coord_picker(local_file)
+            self.frame.after(0, lambda: self._show_coord_picker(local_file))
         except Exception as e:
-            self._log(tr("script_screenshot_failed", error=e), True)
+            self.frame.after(0, lambda: self._log(tr("script_screenshot_failed", error=e), True))
+
+    def _refresh_picker_screenshot(self, canvas, max_w, max_h):
+        try:
+            local_file = self._capture_screenshot()
+            new_img = Image.open(local_file)
+            new_phone_w, new_phone_h = new_img.size
+            new_scale = min(max_w / new_phone_w, max_h / new_phone_h)
+            new_display_w = int(new_phone_w * new_scale)
+            new_display_h = int(new_phone_h * new_scale)
+            
+            new_img_resized = new_img.resize((new_display_w, new_display_h), Image.LANCZOS)
+            new_photo = ImageTk.PhotoImage(new_img_resized)
+            
+            new_offset_x = (max_w - new_display_w) // 2
+            new_offset_y = (max_h - new_display_h) // 2
+            
+            def update_canvas():
+                canvas.delete("all")
+                canvas.create_image(new_offset_x + new_display_w // 2, new_offset_y + new_display_h // 2, image=new_photo, anchor="center")
+                canvas.image = new_photo
+                self.captured_coords = []
+                self.coord_marker = None
+                self.coords_display.config(text="")
+            
+            self.frame.after(0, update_canvas)
+        except Exception as e:
+            self.frame.after(0, lambda: self._log(tr("script_screenshot_failed", error=e), True))
 
     def _show_coord_picker(self, image_path):
         self.captured_coords = []
         self.coord_marker = None
         
         picker_window = tk.Toplevel(self.frame)
+        self.coord_picker_window = picker_window
         picker_window.title(tr("script_coord_picker_title"))
         picker_window.geometry("500x700")
         picker_window.transient(self.frame)
+
+        def on_close():
+            self.coord_picker_window = None
+            picker_window.destroy()
+        
+        picker_window.protocol("WM_DELETE_WINDOW", on_close)
         
         ttk.Label(picker_window, text=tr("script_coord_picker_info")).pack(fill="x", padx=10, pady=5)
         
@@ -398,35 +441,13 @@ class ScriptPage(BasePage):
             self.coords_display.config(text="")
         
         def refresh_screenshot():
-            try:
-                self._log(tr("script_taking_screenshot"))
-                local_file = self._capture_screenshot()
-                
-                new_img = Image.open(local_file)
-                new_phone_w, new_phone_h = new_img.size
-                new_scale = min(max_w / new_phone_w, max_h / new_phone_h)
-                new_display_w = int(new_phone_w * new_scale)
-                new_display_h = int(new_phone_h * new_scale)
-                
-                new_img_resized = new_img.resize((new_display_w, new_display_h), Image.LANCZOS)
-                new_photo = ImageTk.PhotoImage(new_img_resized)
-                
-                canvas.delete("all")
-                new_offset_x = (max_w - new_display_w) // 2
-                new_offset_y = (max_h - new_display_h) // 2
-                canvas.create_image(new_offset_x + new_display_w // 2, new_offset_y + new_display_h // 2, image=new_photo, anchor="center")
-                canvas.image = new_photo
-                
-                self.captured_coords = []
-                self.coord_marker = None
-                self.coords_display.config(text="")
-            except Exception as e:
-                self._log(tr("script_screenshot_failed", error=e), True)
+            self._log(tr("script_taking_screenshot"))
+            threading.Thread(target=self._refresh_picker_screenshot, args=(canvas, max_w, max_h), daemon=True).start()
         
         ttk.Button(btn_frame, text=tr("script_insert_coords"), command=insert_coords, takefocus=False).pack(side="left", padx=5)
         ttk.Button(btn_frame, text=tr("script_clear_coords"), command=self._clear_captured_coords, takefocus=False).pack(side="left", padx=5)
         ttk.Button(btn_frame, text=tr("script_refresh_coords"), command=refresh_screenshot, takefocus=False).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text=tr("script_close_picker"), command=picker_window.destroy, takefocus=False).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text=tr("script_close_picker"), command=on_close, takefocus=False).pack(side="right", padx=5)
         
         canvas.bind("<Button-1>", on_click)
 

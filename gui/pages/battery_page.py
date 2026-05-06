@@ -1,4 +1,5 @@
 from tkinter import ttk
+import threading
 from gui.utils import BasePage
 from gui.i18n import tr
 
@@ -72,13 +73,24 @@ class BatteryPage(BasePage):
     def load_battery_info(self):
         if not self.adb_client or not self.adb_client.current_device:
             return
+        threading.Thread(target=self._load_battery_info_async, daemon=True).start()
+
+    def _load_battery_info_async(self):
         output, ok = self.adb_client.run_adb_cmd("shell dumpsys battery")
         if not (ok and output):
             return
+        data = {}
         for line in output.split("\n"):
             s = line.strip()
             if key := next((k for k in _BATTERY_MAPPING if k in s), None):
-                self.battery_labels[_BATTERY_MAPPING[key]].config(text=s.split(":")[1].strip())
+                data[_BATTERY_MAPPING[key]] = s.split(":")[1].strip()
+        
+        self.frame.after(0, lambda: self._update_battery_ui(data))
+
+    def _update_battery_ui(self, data):
+        for key, value in data.items():
+            if key in self.battery_labels:
+                self.battery_labels[key].config(text=value)
 
     def _set_battery_level(self):
         if level := self.battery_level_entry.get().strip():

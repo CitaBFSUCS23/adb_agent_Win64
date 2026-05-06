@@ -1,4 +1,5 @@
 import os
+import threading
 from tkinter import ttk, filedialog, messagebox
 from gui.utils import BasePage
 from gui.i18n import tr
@@ -100,13 +101,21 @@ class SoftwarePage(BasePage):
         if not self.adb_client or not self.adb_client.current_device:
             return
         cmd = f"shell pm list packages {flag}" if flag else "shell pm list packages"
+        threading.Thread(target=self._list_apps_async, args=(cmd,), daemon=True).start()
+
+    def _list_apps_async(self, cmd):
         output, ok = self.adb_client.run_adb_cmd(cmd)
         if ok and output:
-            self.app_list = [l.removeprefix("package:").strip() for l in output.split("\n") if l.startswith("package:")]
-            self.app_listbox.delete(*self.app_listbox.get_children())
-            for app in self.app_list:
-                self.app_listbox.insert("", "end", text=app)
-            self._log(tr("software_found_apps", count=len(self.app_list)))
+            app_list = [l.removeprefix("package:").strip() for l in output.split("\n") if l.startswith("package:")]
+            count = len(app_list)
+            self.frame.after(0, lambda: self._update_app_list_ui(app_list, count))
+
+    def _update_app_list_ui(self, app_list, count):
+        self.app_list = app_list
+        self.app_listbox.delete(*self.app_listbox.get_children())
+        for app in self.app_list:
+            self.app_listbox.insert("", "end", text=app)
+        self._log(tr("software_found_apps", count=count))
 
     def _on_app_select(self, event):
         if sel := self.app_listbox.selection():
@@ -161,7 +170,12 @@ class SoftwarePage(BasePage):
             return
         apk_path = output.removeprefix("package:").strip()
         if save_path := filedialog.asksaveasfilename(title=tr("software_save_apk_title"), defaultextension=".apk", initialfile=f"{pkg}.apk", filetypes=[(tr("software_apk_file"), "*.apk")]):
-            self._run(f"pull {apk_path} {save_path}")
+            threading.Thread(target=self._export_async, args=(apk_path, save_path, pkg), daemon=True).start()
+
+    def _export_async(self, apk_path, save_path, pkg):
+        self._log(tr("common_saving"))
+        self._run(f"pull {apk_path} {save_path}")
+        self.frame.after(0, lambda: self._log(tr("software_export_success", path=save_path)))
 
     def _select_apk(self):
         if path := filedialog.askopenfilename(title=tr("software_select_apk_title"), filetypes=[(tr("software_apk_file"), "*.apk")]):
@@ -176,4 +190,9 @@ class SoftwarePage(BasePage):
         if not os.path.exists(apk_path):
             self._log(tr("software_file_not_exists", path=apk_path), True)
             return
-        self._run(f"install {'-r ' if reinstall else ''}{apk_path}")
+        cmd = f"install {'-r ' if reinstall else ''}{apk_path}"
+        threading.Thread(target=self._install_async, args=(cmd,), daemon=True).start()
+
+    def _install_async(self, cmd):
+        self._log(tr("common_loading"))
+        self._run(cmd)

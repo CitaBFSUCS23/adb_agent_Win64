@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import sys
 import os
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -66,7 +67,6 @@ class MainApp:
         self.key_simulation = KeySimulationWidget(main_vertical_paned, self.adb_client)
         main_vertical_paned.add(self.key_simulation.frame, weight=0)
         
-        # Connect screen cast and screenshot buttons
         self.key_simulation.btn_stream_toggle.config(command=self._toggle_stream)
         self.key_simulation.btn_screenshot.config(command=self._take_screenshot)
 
@@ -75,6 +75,8 @@ class MainApp:
 
         for pc in self.page_classes.values():
             pc.set_adb_client(self.adb_client)
+            if hasattr(pc, 'set_screen_cast_manager'):
+                pc.set_screen_cast_manager(self.screen_cast_manager)
 
         self._refresh_language()
         self._initial_refresh()
@@ -107,14 +109,20 @@ class MainApp:
         self._refresh_language()
 
     def _initial_refresh(self):
+        threading.Thread(target=self._initial_refresh_async, daemon=True).start()
+
+    def _initial_refresh_async(self):
         devices = self.adb_client.refresh_devices()
+        if devices:
+            self.root.after(0, lambda: self._update_initial_ui(devices))
+
+    def _update_initial_ui(self, devices):
         home = self.page_classes["home"]
         home.device_combo["values"] = devices
-        if devices:
-            home.device_combo.set(devices[0])
-            self.adb_client.current_device = devices[0]
-            home.load_device_info()
+        home.device_combo.set(devices[0])
+        self.adb_client.current_device = devices[0]
         home.device_combo.bind("<<ComboboxSelected>>", self._on_device_changed)
+        home.load_device_info()
 
     def _on_device_changed(self):
         if selected := self.page_classes["home"].device_combo.get():

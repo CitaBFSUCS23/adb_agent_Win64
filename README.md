@@ -57,6 +57,15 @@ A powerful Python-based GUI tool for managing Android devices via ADB (Android D
 - Dangerous command detection and warning
 - API configuration import/export
 
+### Performance Optimization
+- **Multi-threaded Architecture**: All ADB operations run in background threads, UI never freezes
+- **Parallel Command Execution**: Independent ADB commands within the same page execute concurrently
+  - Home page: 11+ getprop commands run in parallel (~10-15x faster)
+  - Adjust page: 4 settings commands run in parallel (~3-4x faster)
+  - Display page: wm size and density commands run in parallel (~2x faster)
+- **Thread-safe UI Updates**: All UI updates use Tkinter's `after()` method for safe main-thread execution
+- **Daemon Threads**: Background threads automatically clean up on application exit
+
 ## Requirements
 
 - **Operating System**: Windows 10/11

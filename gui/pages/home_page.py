@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from gui.utils import BasePage
 from gui.i18n import tr
 
@@ -87,11 +89,18 @@ class HomePage(BasePage):
     def _refresh_devices(self):
         if not self.adb_client:
             return
-        if devices := self.adb_client.refresh_devices():
-            self.device_combo["values"] = devices
-            self.device_combo.set(devices[0])
-            self.adb_client.current_device = devices[0]
-            self.load_device_info()
+        threading.Thread(target=self._refresh_devices_async, daemon=True).start()
+
+    def _refresh_devices_async(self):
+        devices = self.adb_client.refresh_devices()
+        if devices:
+            self.frame.after(0, lambda: self._update_devices_ui(devices))
+
+    def _update_devices_ui(self, devices):
+        self.device_combo["values"] = devices
+        self.device_combo.set(devices[0])
+        self.adb_client.current_device = devices[0]
+        self.load_device_info()
 
     def _start_network_debug(self):
         if not self.adb_client:
@@ -149,39 +158,79 @@ class HomePage(BasePage):
     def load_device_info(self):
         if not self.adb_client or not self.adb_client.current_device:
             return
-        g = self._get_prop
-        brand, model, codename = g("ro.product.brand"), g("ro.product.model"), g("ro.product.device")
-        android, api = g("ro.build.version.release"), g("ro.build.version.sdk")
-        cpu, storage = g("ro.product.cpu.abi"), g("ro.hardware.egl") or g("ro.boot.hardware.platform")
+        threading.Thread(target=self._load_device_info_async, daemon=True).start()
 
-        disp, _ = self.adb_client.run_adb_cmd("shell wm size")
-        dpi, _ = self.adb_client.run_adb_cmd("shell wm density")
-        size, density = self._last_line_value(disp), self._last_line_value(dpi)
+    def _load_device_info_async(self):
+        props = {
+            "brand": "ro.product.brand",
+            "model": "ro.product.model",
+            "codename": "ro.product.device",
+            "android": "ro.build.version.release",
+            "api": "ro.build.version.sdk",
+            "cpu": "ro.product.cpu.abi",
+            "storage": "ro.hardware.egl",
+            "board": "ro.product.board",
+            "platform": "ro.board.platform",
+            "build": "ro.build.fingerprint",
+            "version": "ro.version",
+        }
+        
+        results = {}
+
+        with ThreadPoolExecutor(max_workers=len(props)) as executor:
+            futures = {
+                executor.submit(self.adb_client.run_adb_cmd, f"shell getprop {prop}"): key
+                for key, prop in props.items()
+            }
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    output, _ = future.result()
+                    results[key] = output or ""
+                except Exception:
+                    results[key] = ""
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            wm_size_future = executor.submit(self.adb_client.run_adb_cmd, "shell wm size")
+            wm_density_future = executor.submit(self.adb_client.run_adb_cmd, "shell wm density")
+            battery_future = executor.submit(self.adb_client.run_adb_cmd, "shell dumpsys battery")
+            uptime_future = executor.submit(self.adb_client.run_adb_cmd, "shell uptime")
+            
+            disp, _ = wm_size_future.result()
+            dpi, _ = wm_density_future.result()
+            batt, _ = battery_future.result()
+            uptime, _ = uptime_future.result()
+
+        size = self._last_line_value(disp)
+        density = self._last_line_value(dpi)
         display_info = f"{size}({density}dpi)" if size and density else ""
-
-        batt, _ = self.adb_client.run_adb_cmd("shell dumpsys battery")
+        
         batt_info = ""
         if batt and (level := self._extract(batt, "level")):
             batt_info = f"{level}% {self._extract(batt, 'voltage')}mV {self._extract(batt, 'temperature')}°C"
-
-        uptime, _ = self.adb_client.run_adb_cmd("shell uptime")
-        kernel = g("ro.version") or (self.adb_client.run_adb_cmd("shell uname -r")[0] or "")
-
+        
+        storage = results.get("storage") or results.get("storage")
+        kernel = results.get("version") or (self.adb_client.run_adb_cmd("shell uname -r")[0] or "")
+        
         data = {
-            "home_brand": brand,
-            "home_model": model,
-            "home_codename": codename,
-            "home_system": f"Android {android} (API{api})",
-            "home_cpu": cpu,
+            "home_brand": results.get("brand", ""),
+            "home_model": results.get("model", ""),
+            "home_codename": results.get("codename", ""),
+            "home_system": f"Android {results.get('android', '')} (API{results.get('api', '')})",
+            "home_cpu": results.get("cpu", ""),
             "home_storage": storage,
             "home_display": display_info,
             "home_uptime": uptime or "",
             "home_battery": batt_info,
-            "home_board": g("ro.product.board"),
-            "home_platform": g("ro.board.platform"),
-            "home_build": g("ro.build.fingerprint"),
+            "home_board": results.get("board", ""),
+            "home_platform": results.get("platform", ""),
+            "home_build": results.get("build", ""),
             "home_kernel": kernel,
         }
+        
+        self.frame.after(0, lambda: self._update_device_info_ui(data))
+
+    def _update_device_info_ui(self, data):
         for k, v in data.items():
             if k in self.info_labels:
                 self.info_labels[k].config(text=v)

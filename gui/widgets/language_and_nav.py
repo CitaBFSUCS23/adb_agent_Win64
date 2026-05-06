@@ -14,7 +14,6 @@ class LanguageAndNavWidget:
         self._build_widgets()
 
     def _build_widgets(self):
-        # One row: language selector and navigation buttons together
         single_row = ttk.Frame(self.frame)
         single_row.pack(fill="x", padx=5, pady=5)
 
@@ -26,7 +25,6 @@ class LanguageAndNavWidget:
         self.lang_combo.pack(side="left", padx=2)
         self.lang_combo.bind("<<ComboboxSelected>>", self._on_lang_changed_event)
 
-        # Navigation buttons
         self.nav_buttons = []
         for i, (_, page_key) in enumerate(NAV_PAGES):
             btn = ttk.Button(single_row, text="", width=8,

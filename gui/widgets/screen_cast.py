@@ -1,11 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-#
-# This file uses scrcpy for screen casting functionality.
-# scrcpy is licensed under the Apache License 2.0.
-# Copyright (C) 2018 Genymobile
-# Copyright (C) 2018-2021 Romain Vimont
-# See: https://github.com/Genymobile/scrcpy
-
 import subprocess
 import threading
 import time
@@ -68,8 +60,7 @@ class ScreenCastManager:
         
         self.adb_client.log(tr("screen_cast_starting"))
         self._stop_scrcpy()
-        
-        # Get screen size to calculate window dimensions
+
         try:
             import tkinter as tk
             temp_root = tk.Tk()

@@ -14,8 +14,7 @@ class KeySimulationWidget:
     def _build_widgets(self):
         key_row = ttk.Frame(self.frame)
         key_row.pack(fill="x", padx=5, pady=3)
-        
-        # Navigation group: Back, Home, Recents
+
         for text_key, code in [
             ("home_key_back", 4),
             ("home_key_home", 3),
@@ -24,11 +23,9 @@ class KeySimulationWidget:
             btn = ttk.Button(key_row, text="", command=lambda c=code: self._press_key(c))
             btn.pack(side="left", padx=3)
             setattr(self, f"btn_{text_key}", btn)
-        
-        # Separator 1
+
         ttk.Separator(key_row, orient="vertical").pack(side="left", padx=8, fill="y")
-        
-        # Volume group: Vol+, Vol-, Mute
+
         for text_key, code in [
             ("home_key_vol_up", 24),
             ("home_key_vol_down", 25),
@@ -38,10 +35,8 @@ class KeySimulationWidget:
             btn.pack(side="left", padx=3)
             setattr(self, f"btn_{text_key}", btn)
         
-        # Separator 2
         ttk.Separator(key_row, orient="vertical").pack(side="left", padx=8, fill="y")
-        
-        # Power group: Power, Long Press Power
+
         btn_power = ttk.Button(key_row, text="", command=lambda: self._press_key(26))
         btn_power.pack(side="left", padx=3)
         self.btn_home_key_power = btn_power
@@ -49,11 +44,9 @@ class KeySimulationWidget:
         btn_power_long = ttk.Button(key_row, text="", command=lambda: self._long_press_key(26))
         btn_power_long.pack(side="left", padx=3)
         self.btn_home_key_power_long = btn_power_long
-        
-        # Separator 3
+
         ttk.Separator(key_row, orient="vertical").pack(side="left", padx=8, fill="y")
 
-        # Screen cast & screenshot
         self.btn_stream_toggle = ttk.Button(key_row, text="")
         self.btn_stream_toggle.pack(side="left", padx=3)
         self.btn_screenshot = ttk.Button(key_row, text="")
