@@ -56,6 +56,13 @@ A powerful Python-based GUI tool for managing Android devices via ADB (Android D
 - Intelligent observation parsing
 - Dangerous command detection and warning
 - API configuration import/export
+- **Tools Layer**: Fully plugin-based! Just add a .py file in tools/ directory that inherits from BaseTool
+  - ADBTool: Device control via ADB
+  - PythonTool: Script execution on host
+- **Skills Layer**: Fully plugin-based! Just add a .md file in skills/ directory
+  - Photo Export: Export photos from device
+  - App Uninstall: Uninstall applications
+  - Elderly Mode Setup: Configure device for elderly users
 
 ### Performance Optimization
 - **Multi-threaded Architecture**: All ADB operations run in background threads, UI never freezes
@@ -133,6 +140,14 @@ Agent/
 │   └── widgets/            # Reusable components
 │       ├── adb_terminal.py  # ADB command terminal
 │       └── screen_cast.py   # Screen casting window
+├── tools/                 # Tools layer (OpenClaw architecture, FULLY PLUGIN-BASED!)
+│   ├── __init__.py        # BaseTool abstract base class and automatic tool loader
+│   ├── adb_tool.py        # ADBTool - device control via ADB
+│   └── python_tool.py     # PythonTool - script execution on host
+├── skills/                # Skills layer (OpenClaw architecture, FULLY PLUGIN-BASED!)
+│   ├── photo_export.md    # Photo export skill
+│   ├── app_uninstall.md   # App uninstall skill
+│   └── elderly_mode.md    # Elderly mode setup skill
 ├── dependencies/           # Binary dependencies
 │   ├── adb.exe            # Android Debug Bridge
 │   ├── scrcpy.exe         # Screen mirroring tool
@@ -144,6 +159,106 @@ Agent/
 ├── LICENSE               # Apache License 2.0
 └── README.md             # This file
 ```
+
+## Plugin Development Guide
+
+### Adding New Tools (Tools Layer)
+
+The system features a **fully plugin-based tool architecture**. To add a new tool:
+
+1. **Create a new file** in `tools/` directory, e.g., `tools/my_tool.py`
+2. **Inherit from BaseTool** and implement all abstract methods
+3. **That's it!** No need to modify any other code - the tool is automatically discovered!
+
+**Example Tool Structure:**
+
+```python
+from tools import BaseTool
+from typing import Tuple
+
+
+class MyTool(BaseTool):
+    """My Custom Tool"""
+
+    @property
+    def name(self) -> str:
+        """Tool name (uppercase, used for selection)"""
+        return "MYTOOL"
+
+    @property
+    def description(self) -> str:
+        """Tool description for AI prompt"""
+        return "My custom tool for doing awesome things"
+
+    @classmethod
+    def requires_context(cls) -> bool:
+        """Return True if your tool needs special initialization parameters"""
+        return False  # or True if you need context
+
+    @classmethod
+    def get_init_params(cls) -> dict:
+        """Return required initialization parameters if requires_context is True"""
+        return {"param1": "Description of parameter 1"}
+
+    def __init__(self, param1=None):
+        """Initialize your tool"""
+        self.param1 = param1
+
+    def execute(self, command: str, context: dict = None) -> Tuple[str, bool]:
+        """Execute the command and return (output, success)"""
+        try:
+            # Your implementation here
+            return f"Result: {command}", True
+        except Exception as e:
+            return f"Error: {e}", False
+
+    def get_prompt_section(self) -> str:
+        """Return custom prompt section for this tool (optional, has default)"""
+        return f"""### Tool: {self.name}
+- Purpose: {self.description}
+- Syntax: TOOL: {self.name.upper()}, COMMAND: <command>
+- Additional notes: Your tool's specific instructions here
+"""
+```
+
+### Adding New Skills (Skills Layer)
+
+Adding new skills is even easier!
+
+1. **Create a new Markdown file** in `skills/` directory, e.g., `skills/my_skill.md`
+2. **Write your skill documentation** in Markdown
+3. **That's it!** The skill is automatically discovered!
+
+**Example Skill Structure:**
+
+```markdown
+# Skill: My Skill Name
+
+## Description
+Brief description of what this skill does.
+
+## Preconditions
+- List any required conditions
+- Device must be connected, etc.
+
+## Steps
+1. Step one explanation
+2. Step two explanation
+   - Substep details
+3. Step three explanation
+
+## Tips
+- Helpful tip 1
+- Helpful tip 2
+```
+
+### OpenClaw Architecture Alignment
+
+This project now fully implements the OpenClaw architecture principles:
+- **Tools Layer**: Abstract base class + plugin discovery
+- **Skills Layer**: Markdown-based documentation + plugin discovery  
+- **Memory Layer**: (Future work)
+- **Plugins Layer**: (Future work for full plugin system)
 
 ## Language Support
 
@@ -167,8 +282,6 @@ For full license text, see:
 This project is licensed under the **Apache License 2.0**.
 
 ```
-Copyright (c) 2024-2025 Android Device Manager Contributors
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at

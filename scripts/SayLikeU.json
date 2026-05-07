@@ -1,0 +1,4 @@
+{
+  "name": "SayLikeU",
+  "content": "shell input keyevent 3\nsleep 0.2\nshell input swipe 820 836 233 732 20\nsleep 0.4\nshell input tap 140 225\nsleep 0.4\nshell input tap 561 688\nsleep 0.4\nshell input tap 205 2327\nsleep 1\nshell input tap 612 224\nsleep 0.4\nshell input tap 521 148\nsleep 0.4\nshell input text \"Yimeng\"\nsleep 0.4\nshell input tap 694 330\nsleep 0.4\nshell input tap 665 2358\nsleep 0.4\nshell input text \"I am currently giving a classroom presentation. I am honored to inform you that you have once again become my experimental subject again!\"\nshell input tap 1023 1466\nshell input text \"Yes, and I've only conducted a few experiments, and I've failed many times. This success is purely a fluke\"\nshell input tap 1023 1466\nshell input text \"If this message is successfully sent, then it's fate: I like you\"\nshell input tap 1023 1466"
+}
