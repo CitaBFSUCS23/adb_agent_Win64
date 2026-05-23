@@ -1,176 +1,79 @@
-from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Optional, Any
-import os
-import sys
+from __future__ import annotations
+
 import importlib
 import inspect
+import os
+import sys
+from abc import ABC, abstractmethod
+from typing import Any, Optional
 
 
 class BaseTool(ABC):
-    """Base class for all tools"""
+    """Base class for all tools."""
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        """Get tool name (uppercase, used for selection)"""
-        pass
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def description(self) -> str:
-        """Get tool description"""
-        pass
+    def description(self) -> str: ...
 
     @classmethod
     @abstractmethod
     def requires_context(cls) -> bool:
-        """
-        Does this tool require special context/parameters to initialize?
-        
-        Returns:
-            True if tool needs context (like ADBTool needs adb_client), False otherwise
-        """
-        pass
+        """Does this tool need context params to instantiate?"""
+        ...
 
     @classmethod
-    def get_init_params(cls) -> Dict[str, Any]:
-        """
-        Get parameter descriptions for initialization
-        
-        Returns:
-            Dictionary of parameter name to description
-        """
+    def get_init_params(cls) -> dict[str, str]:
+        """Get init param descriptions. Return {param_name: description}."""
         return {}
 
     @abstractmethod
-    def execute(self, command: str, context: dict = None) -> Tuple[str, bool]:
-        """
-        Execute a command
-        
-        Args:
-            command: Command to execute
-            context: Additional context information
-            
-        Returns:
-            Tuple of (output, success)
-        """
-        pass
+    def execute(self, command: str, context: Optional[dict] = None) -> tuple[str, bool]: ...
 
     def get_prompt_section(self) -> str:
-        """Get the prompt section for this tool"""
-        return f"""### Tool: {self.name}
-- Purpose: {self.description}
-- Syntax: TOOL: {self.name.upper()}, COMMAND: <command>
-"""
+        return f"### {self.name}\n- {self.description}"
 
 
-def discover_tools(tools_dir: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Discover all tool classes in the tools directory
-    
-    Args:
-        tools_dir: Directory to search for tool modules (default: current tools/ directory)
-        
-    Returns:
-        Dictionary mapping tool name to tool class
-    """
+def discover_tools(tools_dir: Optional[str] = None) -> dict[str, type]:
+    """Auto-discover tool classes in tools/ directory. Key = filename (e.g. 'adb_tool')."""
     if tools_dir is None:
-        # Get the directory where this __init__.py is located
         tools_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    tool_classes = {}
-    
-    # Add current directory to path for imports
     if tools_dir not in sys.path:
-        sys.path.insert(0, tools_dir)
-    
-    # Get parent directory for relative imports
-    parent_dir = os.path.dirname(tools_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
-    # Search for all Python files in tools directory
-    for filename in os.listdir(tools_dir):
-        if filename.endswith('.py') and filename != '__init__.py':
-            module_name = filename[:-3]  # Remove .py extension
-            
-            try:
-                # Import the module
-                module = importlib.import_module(f'tools.{module_name}')
-                
-                # Find all classes that inherit from BaseTool
-                for name, obj in inspect.getmembers(module, inspect.isclass):
-                    if (issubclass(obj, BaseTool) and 
-                        obj != BaseTool and 
-                        not inspect.isabstract(obj)):
-                        # Get tool name from the class
-                        # Create a dummy instance to get name (if possible)
-                        try:
-                            if not obj.requires_context():
-                                dummy_instance = obj()
-                                tool_name = dummy_instance.name
-                                tool_classes[tool_name] = obj
-                            else:
-                                # For context-required tools, try to get name from class doc or convention
-                                # Convention: class name matches tool name (e.g., ADBTool -> ADB)
-                                if name.endswith('Tool'):
-                                    tool_name = name[:-4].upper()
-                                    tool_classes[tool_name] = obj
-                        except Exception:
-                            # If we can't get name from instance, use class name convention
-                            if name.endswith('Tool'):
-                                tool_name = name[:-4].upper()
-                                tool_classes[tool_name] = obj
-                            
-            except Exception as e:
-                print(f"Warning: Could not load tool module {filename}: {e}")
-                continue
-    
-    return tool_classes
+        sys.path.insert(0, os.path.dirname(tools_dir))
 
-
-def load_tools(
-    tool_classes: Optional[Dict[str, Any]] = None,
-    context: Optional[Dict[str, Any]] = None
-) -> Dict[str, BaseTool]:
-    """
-    Load and instantiate tools
-    
-    Args:
-        tool_classes: Dictionary of tool name to tool class (from discover_tools)
-        context: Context dictionary with initialization parameters
-        
-    Returns:
-        Dictionary mapping tool names to tool instances
-    """
-    if tool_classes is None:
-        tool_classes = discover_tools()
-    
-    if context is None:
-        context = {}
-    
-    tools = {}
-    
-    for tool_name, tool_class in tool_classes.items():
-        try:
-            if tool_class.requires_context():
-                # Tool requires special context, check if we have the needed params
-                params = tool_class.get_init_params()
-                init_kwargs = {}
-                
-                # Try to get required params from context
-                for param_name in params:
-                    if param_name in context:
-                        init_kwargs[param_name] = context[param_name]
-                
-                # Only instantiate if we have all required params
-                if len(init_kwargs) >= len(params):
-                    tools[tool_name] = tool_class(**init_kwargs)
-            else:
-                # Tool doesn't require special context, instantiate directly
-                tools[tool_name] = tool_class()
-        except Exception as e:
-            print(f"Warning: Could not instantiate tool {tool_name}: {e}")
+    classes: dict[str, type] = {}
+    for fn in sorted(os.listdir(tools_dir)):
+        if not fn.endswith('.py') or fn == '__init__.py':
             continue
-    
+        try:
+            mod = importlib.import_module(f'tools.{fn[:-3]}')
+            for _name, obj in inspect.getmembers(mod, inspect.isclass):
+                if issubclass(obj, BaseTool) and obj is not BaseTool and not inspect.isabstract(obj):
+                    classes[fn[:-3]] = obj  # key = filename without .py
+        except Exception as e:
+            print(f"Warning: Could not load {fn}: {e}")
+    return classes
+
+
+def load_tools(tool_classes: Optional[dict[str, type]] = None,
+               context: Optional[dict[str, Any]] = None) -> dict[str, BaseTool]:
+    """Instantiate discovered tools with context params."""
+    tool_classes = tool_classes or discover_tools()
+    ctx = context or {}
+    tools: dict[str, BaseTool] = {}
+
+    for tool_name, tool_cls in tool_classes.items():
+        try:
+            if tool_cls.requires_context():
+                params = tool_cls.get_init_params()
+                kwargs = {k: ctx[k] for k in params if k in ctx}
+                if len(kwargs) >= len(params):
+                    tools[tool_name] = tool_cls(**kwargs)
+            else:
+                tools[tool_name] = tool_cls()
+        except Exception as e:
+            print(f"Warning: Could not instantiate {tool_name}: {e}")
     return tools

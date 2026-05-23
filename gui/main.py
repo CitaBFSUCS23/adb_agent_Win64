@@ -10,7 +10,7 @@ from gui.utils import ADBClient
 from gui.widgets.adb_terminal import ADBTerminal
 from gui.widgets.screen_cast import ScreenCastManager
 from gui.widgets.key_simulation import KeySimulationWidget
-from gui.widgets.language_and_nav import LanguageAndNavWidget
+from gui.widgets.language_and_nav import languageAndNavWidget
 from gui.pages.home_page import HomePage
 from gui.pages.software_page import SoftwarePage
 from gui.pages.display_page import DisplayPage
@@ -38,12 +38,12 @@ class MainApp:
         main_vertical_paned.pack(fill="both", expand=True)
 
         top_horizontal_paned = ttk.PanedWindow(main_vertical_paned, orient=tk.HORIZONTAL)
-        main_vertical_paned.add(top_horizontal_paned, weight=1)
+        main_vertical_paned.add(top_horizontal_paned)
 
         left_frame = ttk.Frame(top_horizontal_paned)
-        top_horizontal_paned.add(left_frame, weight=1)
+        top_horizontal_paned.add(left_frame)
 
-        self.language_and_nav = LanguageAndNavWidget(left_frame, 
+        self.language_and_nav = languageAndNavWidget(left_frame, 
             on_lang_changed=self._on_lang_changed,
             on_nav_clicked=self.show_page)
         self.language_and_nav.frame.pack(fill="x")
@@ -60,12 +60,12 @@ class MainApp:
             self.page_classes[page_id] = page_obj
 
         center_frame = ttk.Frame(top_horizontal_paned)
-        top_horizontal_paned.add(center_frame, weight=1)
+        top_horizontal_paned.add(center_frame)
         self.adb_terminal = ADBTerminal(center_frame)
         self.adb_terminal.set_adb_client(self.adb_client)
 
         self.key_simulation = KeySimulationWidget(main_vertical_paned, self.adb_client)
-        main_vertical_paned.add(self.key_simulation.frame, weight=0)
+        main_vertical_paned.add(self.key_simulation.frame)
         
         self.key_simulation.btn_stream_toggle.config(command=self._toggle_stream)
         self.key_simulation.btn_screenshot.config(command=self._take_screenshot)

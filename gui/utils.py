@@ -16,25 +16,30 @@ class ADBClient:
         if self.log_callback:
             self.log_callback(message, is_error)
 
-    def run_adb(self, *args, device=None):
+    def run_adb(self, *args, device=None, cwd=None):
         cmd = [ADB_PATH]
         if target := device or self.current_device:
             cmd.extend(["-s", target])
         cmd.extend(args)
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            return r.stdout.strip(), r.returncode == 0
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
+            # Combine stdout + stderr so errors are visible
+            out = r.stdout.strip()
+            err = r.stderr.strip()
+            if err:
+                out = f"{out}\n{err}".strip() if out else err
+            return out, r.returncode == 0
         except Exception as e:
             return str(e), False
 
-    def run_adb_cmd(self, *args):
+    def run_adb_cmd(self, *args, cwd=None):
         cmd_parts = args[0].split() if len(args) == 1 and isinstance(args[0], str) else args
         cmd_str = " ".join(cmd_parts)
         if not self.current_device and not any(cmd_str.startswith(c) for c in _NO_DEVICE_CMDS):
             self.log(tr("common_select_device"), True)
             return None, False
         self.log(f"$ {cmd_str}")
-        output, ok = self.run_adb(*cmd_parts)
+        output, ok = self.run_adb(*cmd_parts, cwd=cwd)
         if output:
             self.log(output, not ok)
         return output, ok

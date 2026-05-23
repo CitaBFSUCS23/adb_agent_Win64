@@ -4,7 +4,7 @@ from gui.i18n import tr, set_lang, get_lang, available_langs
 from gui.config import NAV_PAGES
 
 
-class LanguageAndNavWidget:
+class languageAndNavWidget:
 
     def __init__(self, parent, on_lang_changed=None, on_nav_clicked=None):
         self.frame = ttk.Frame(parent)

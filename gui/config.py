@@ -6,6 +6,8 @@ ADB_PATH = DEPENDENCIES_DIR / "adb.exe"
 SCRCPY_PATH = DEPENDENCIES_DIR / "scrcpy.exe"
 SCRIPTS_DIR = BASE_DIR / "scripts"
 SCRIPTS_DIR.mkdir(exist_ok=True)
+HISTORY_DIR = BASE_DIR / "history"
+HISTORY_DIR.mkdir(exist_ok=True)
 
 DEFAULT_LANG = "en-us"
 

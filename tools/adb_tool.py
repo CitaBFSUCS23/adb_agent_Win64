@@ -1,4 +1,3 @@
-import re
 from typing import Tuple
 from tools import BaseTool
 
@@ -8,7 +7,7 @@ class ADBTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "ADB"
+        return "adb_tool"
 
     @property
     def description(self) -> str:
@@ -31,32 +30,22 @@ class ADBTool(BaseTool):
         """Execute ADB command"""
         if not self.adb_client:
             return "Error: ADB client not available", False
-        
-        output, ok = self.adb_client.run_adb_cmd(command)
+
+        # Strip leading "adb " if present — run_adb_cmd already prepends it
+        cmd = command.strip()
+        if cmd.lower().startswith("adb "):
+            cmd = cmd[4:].strip()
+
+        cwd = (context or {}).get("work_dir")
+        output, ok = self.adb_client.run_adb_cmd(cmd, cwd=cwd)
+        if not output and ok:
+            return "(empty output — command may have failed or produced no results)", ok
         return output or "", ok
 
     def get_prompt_section(self) -> str:
-        return f"""### Tool: {self.name} (Phone Control)
-- Purpose: {self.description}
-- Syntax: TOOL: {self.name.upper()}, COMMAND: <adb subcommand>
-- Available commands:
-  - shell ls, shell cat, shell find, shell pm list packages
-  - shell dumpsys battery, shell screencap, shell input tap, shell input keyevent
-  - pull, push, install, uninstall, shell wm size, shell wm density
-  - shell settings get/put, shell media volume, etc.
-"""
-
-    @staticmethod
-    def is_dangerous_command(cmd: str) -> bool:
-        """Check if command is dangerous"""
-        dangerous_patterns = [
-            r"\binstall\b", r"\buninstall\b", r"\bpm clear\b",
-            r"\brm\s+-rf\b", r"\bfactory\s+reset\b", r"\bwipe\b",
-            r"\breboot\b", r"\bshutdown\b", r"\bformat\b",
-        ]
-        return any(re.search(p, cmd, re.IGNORECASE) for p in dangerous_patterns)
-
-    @staticmethod
-    def has_chinese(text: str) -> bool:
-        """Check if text contains Chinese characters"""
-        return bool(re.search(r"[\u4e00-\u9fff]", text))
+        return (
+            f"### {self.name}\n"
+            f"- {self.description}\n"
+            f"- Commands: shell subcommands (tap, swipe, input, am, pm, settings, etc.)\n"
+            f"- NOTE: omit 'adb' prefix — the system adds it automatically"
+        )

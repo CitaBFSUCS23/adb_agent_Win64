@@ -7,7 +7,7 @@ from pathlib import Path
 from gui.config import DEFAULT_LANG
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-LANG_DIR = BASE_DIR / "Language"
+LANG_DIR = BASE_DIR / "language"
 
 _current_tr = None
 

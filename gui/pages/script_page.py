@@ -62,10 +62,10 @@ class ScriptPage(BasePage):
         main_split.pack(fill="both", expand=True, padx=5, pady=5)
 
         left_frame = ttk.Frame(main_split)
-        main_split.add(left_frame, weight=1)
+        main_split.add(left_frame)
 
         right_frame = ttk.Frame(main_split)
-        main_split.add(right_frame, weight=1)
+        main_split.add(right_frame)
         
         self.meta_frame = ttk.LabelFrame(left_frame, text="")
         self.meta_frame.pack(fill="x", padx=5, pady=5)
